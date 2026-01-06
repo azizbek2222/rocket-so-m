@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rocket Money Telegram</title>
+    <title>Rocket Money Adsgram</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
     <style>
         body { 
             margin: 0; padding: 0; overflow: hidden; 
@@ -39,8 +40,10 @@
             box-shadow: 0 0 20px rgba(0, 210, 255, 0.5);
             margin-top: 20px; pointer-events: auto;
         }
+        .btn-start:disabled { background: #555; box-shadow: none; cursor: not-allowed; }
         .hidden { display: none !important; }
         .stat-label { font-size: 10px; color: #aaa; text-transform: uppercase; }
+        #adStatus { font-size: 12px; color: #ffeb3b; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -55,14 +58,16 @@
 
     <div id="startScreen" class="menu-screen">
         <h1 style="font-size: 32px; margin-bottom: 5px;">🚀 ROCKET MONEY</h1>
-        <p id="userNameDisplay" style="color: #00d2ff; margin-bottom: 20px;">Yuklanmoqda...</p>
-        <button class="btn-start" onclick="startGame()">BOSHLASH</button>
+        <p id="userNameDisplay" style="color: #00d2ff;">Yuklanmoqda...</p>
+        <p style="font-size: 12px; color: #aaa;">O'yinni boshlash uchun reklamani ko'ring</p>
+        <button id="mainStartBtn" class="btn-start" onclick="showAdAndStart()">BOSHLASH (AD)</button>
+        <div id="adStatus"></div>
     </div>
 
     <div id="gameOverScreen" class="menu-screen hidden">
         <h2 style="color: #ff0055; font-size: 30px;">TAMOM!</h2>
         <p id="finalResult" style="font-size: 16px; margin: 15px 0;"></p>
-        <button class="btn-start" style="background: #34e89e; box-shadow: 0 0 20px #34e89e;" onclick="startGame()">QAYTA O'YNASH</button>
+        <button id="retryBtn" class="btn-start" style="background: #34e89e; box-shadow: 0 0 20px #34e89e;" onclick="showAdAndStart()">QAYTA O'YNASH (AD)</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -71,16 +76,18 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, onValue, set, onDisconnect, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // Telegram ma'lumotlarini olish
+        // Telegram WebApp sozlamalari
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Appni to'liq ekranga yoyish
-        
+        tg.expand();
         const user = tg.initDataUnsafe?.user;
-        const userId = user?.id || "guest_user"; // Telegram ID bo'lmasa guest deb saqlaydi
+        const userId = user?.id || "guest_" + Math.floor(Math.random() * 1000);
         const userName = user?.first_name || "O'yinchi";
-
         document.getElementById("userNameDisplay").innerText = "Salom, " + userName + "!";
 
+        // Adsgram Sozlamalari (BlockID ni o'zgartiring)
+        const AdController = window.Adsgram.init({ blockId: "int-20669" }); 
+
+        // Firebase Sozlamalari
         const firebaseConfig = {
             apiKey: "AIzaSyBt_YoPMKJlEL7RAGwWNx6uPJpoOHaQ2iY",
             authDomain: "game-49172.firebaseapp.com",
@@ -90,26 +97,21 @@
             messagingSenderId: "695585468530",
             appId: "1:695585468530:web:e0155f596c4778d1d412eb"
         };
-
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        
-        // Har bir user uchun shaxsiy balans yo'li
         const userBalanceRef = ref(db, `users/${userId}/balance`);
         const onlineRef = ref(db, 'onlinePlayers');
 
         // Onlayn hisoblagich
-        const connectedRef = ref(db, '.info/connected');
-        onValue(connectedRef, (snap) => {
+        onValue(ref(db, '.info/connected'), (snap) => {
             if (snap.val() === true) {
                 set(onlineRef, increment(1));
                 onDisconnect(onlineRef).set(increment(-1));
             }
         });
-        onValue(onlineRef, (snap) => {
-            document.getElementById("onlineCount").innerText = snap.val() || 1;
-        });
+        onValue(onlineRef, (snap) => { document.getElementById("onlineCount").innerText = snap.val() || 1; });
 
+        // O'yin o'zgaruvchilari
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         canvas.width = window.innerWidth > 450 ? 400 : window.innerWidth;
@@ -117,19 +119,42 @@
 
         let birdY, velocity, pipes, currentSessionScore, totalBalance = 0;
         let gameActive = false;
-        const gravity = 0.16;
-        const jump = -4.6;
-        const pipeSpeed = 1.8;
+        const gravity = 0.16, jump = -4.6, pipeSpeed = 1.8;
 
-        // Foydalanuvchining shaxsiy balansini yuklash
         onValue(userBalanceRef, (snapshot) => {
             totalBalance = snapshot.val() ? parseFloat(snapshot.val()) : 0;
             document.getElementById("highScore").innerText = totalBalance.toFixed(2);
         });
 
-        window.startGame = () => {
-            document.getElementById("startScreen").classList.add("hidden");
-            document.getElementById("gameOverScreen").classList.add("hidden");
+        // Reklama va O'yinni boshlash funksiyasi
+        window.showAdAndStart = async () => {
+            const statusDiv = document.getElementById("adStatus");
+            const btns = [document.getElementById("mainStartBtn"), document.getElementById("retryBtn")];
+            
+            btns.forEach(b => b.disabled = true);
+            statusDiv.innerText = "Reklama yuklanmoqda...";
+
+            try {
+                const result = await AdController.show();
+                // result: { completed: true, done: true, ... }
+                
+                statusDiv.innerText = "Rahmat! O'yin boshlanmoqda...";
+                setTimeout(() => {
+                    document.getElementById("startScreen").classList.add("hidden");
+                    document.getElementById("gameOverScreen").classList.add("hidden");
+                    runGameInstance();
+                }, 500);
+
+            } catch (error) {
+                // Reklama ko'rilmasa yoki xato bo'lsa
+                statusDiv.innerText = "Xato: O'ynash uchun reklamani to'liq ko'rish shart!";
+                console.error("Adsgram error:", error);
+            } finally {
+                btns.forEach(b => b.disabled = false);
+            }
+        };
+
+        function runGameInstance() {
             birdY = canvas.height / 2;
             velocity = 0;
             pipes = [];
@@ -137,7 +162,7 @@
             document.getElementById("currentScore").innerText = "0.00";
             gameActive = true;
             requestAnimationFrame(gameLoop);
-        };
+        }
 
         function createPipe() {
             let gap = 165;
@@ -148,9 +173,7 @@
         function gameLoop() {
             if (!gameActive) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            velocity += gravity;
-            birdY += velocity;
+            velocity += gravity; birdY += velocity;
 
             ctx.font = "45px Arial";
             ctx.save();
@@ -164,10 +187,8 @@
             for (let i = pipes.length - 1; i >= 0; i--) {
                 pipes[i].x -= pipeSpeed;
                 ctx.fillStyle = "#ff0055";
-                ctx.shadowBlur = 10; ctx.shadowColor = "#ff0055";
                 ctx.fillRect(pipes[i].x, 0, 60, pipes[i].top);
                 ctx.fillRect(pipes[i].x, pipes[i].bottom, 60, canvas.height);
-                ctx.shadowBlur = 0;
 
                 if (60 + 15 > pipes[i].x && 60 - 15 < pipes[i].x + 60) {
                     if (birdY - 15 < pipes[i].top || birdY + 10 > pipes[i].bottom) endGame();
@@ -177,11 +198,10 @@
                     currentSessionScore += 0.2;
                     pipes[i].passed = true;
                     document.getElementById("currentScore").innerText = currentSessionScore.toFixed(2);
-                    tg.HapticFeedback.impactOccurred('light'); // Har ball olganda vibratsiya
+                    tg.HapticFeedback.impactOccurred('light');
                 }
                 if (pipes[i].x < -60) pipes.splice(i, 1);
             }
-
             if (birdY > canvas.height || birdY < 0) endGame();
             requestAnimationFrame(gameLoop);
         }
@@ -190,8 +210,6 @@
             gameActive = false;
             const finalScore = parseFloat(currentSessionScore.toFixed(2));
             const newBalance = parseFloat((totalBalance + finalScore).toFixed(2));
-            
-            // Firebase saqlash (Individual Telegram ID bo'yicha)
             await set(userBalanceRef, newBalance);
 
             document.getElementById("finalResult").innerHTML = 
@@ -199,22 +217,13 @@
                 `Jami balans: ${newBalance.toFixed(2)} so'm`;
             
             document.getElementById("gameOverScreen").classList.remove("hidden");
-            tg.HapticFeedback.notificationOccurred('error'); // Yutqazganda vibratsiya
+            tg.HapticFeedback.notificationOccurred('error');
         }
 
-        const handleInput = (e) => {
-            if (gameActive) {
-                velocity = jump;
-                if(e.cancelable) e.preventDefault();
-            }
-        };
-
+        const handleInput = (e) => { if (gameActive) { velocity = jump; e.preventDefault(); } };
         window.addEventListener("mousedown", handleInput);
         window.addEventListener("touchstart", handleInput, { passive: false });
-        window.addEventListener("keydown", (e) => {
-            if (e.code === "Space" || e.code === "ArrowUp") handleInput(e);
-        });
-
+        window.addEventListener("keydown", (e) => { if (e.code === "Space") handleInput(e); });
     </script>
 </body>
 </html>
