@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pul Yechish</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { 
+            margin: 0; padding: 20px; background: #0b1026; 
+            font-family: 'Segoe UI', sans-serif; color: white;
+        }
+        .container { max-width: 400px; margin: 0 auto; }
+        .balance-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px; border-radius: 20px; text-align: center;
+            border: 1px solid #34e89e; margin-bottom: 25px;
+        }
+        .card-type {
+            display: flex; gap: 10px; margin-bottom: 20px;
+        }
+        .type-btn {
+            flex: 1; padding: 12px; border: 1px solid #444;
+            background: transparent; color: white; border-radius: 12px;
+            cursor: pointer; font-weight: bold;
+        }
+        .type-btn.active { border-color: #00d2ff; background: rgba(0, 210, 255, 0.1); }
+        
+        input {
+            width: 100%; padding: 15px; margin-bottom: 15px;
+            border-radius: 12px; border: 1px solid #444;
+            background: #161d3a; color: white; box-sizing: border-box;
+            font-size: 16px;
+        }
+        .btn-send {
+            width: 100%; padding: 15px; background: #34e89e;
+            border: none; border-radius: 12px; color: #0b1026;
+            font-size: 18px; font-weight: bold; cursor: pointer;
+        }
+        .btn-send:disabled { background: #555; }
+        .note { font-size: 12px; color: #aaa; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="balance-box">
+        <div style="font-size: 14px; color: #aaa;">Sizning balansingiz</div>
+        <div style="font-size: 28px; font-weight: bold; color: #34e89e;"><span id="userBalance">0.00</span> so'm</div>
+    </div>
+
+    <div class="card-type">
+        <button class="type-btn active" onclick="selectType('Uzcard', this)">Uzcard</button>
+        <button class="type-btn" onclick="selectType('Humo', this)">Humo</button>
+    </div>
+
+    <input type="text" id="cardNumber" placeholder="0000 0000 0000 0000" maxlength="19">
+    <input type="number" id="amount" placeholder="Yechish summasi (min: 5000)">
+    
+    <button class="btn-send" id="withdrawBtn" onclick="requestWithdraw()">SO'ROV YUBORISH</button>
+    <p class="note">Minimal yechish summasi 5000 so'm. <br>To'lovlar 24 soat ichida amalga oshiriladi.</p>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue, set, push, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.BackButton.show();
+    tg.BackButton.onClick(() => window.location.href = 'rocket.html');
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBt_YoPMKJlEL7RAGwWNx6uPJpoOHaQ2iY",
+        authDomain: "game-49172.firebaseapp.com",
+        databaseURL: "https://game-49172-default-rtdb.firebaseio.com",
+        projectId: "game-49172",
+        storageBucket: "game-49172.firebasestorage.app",
+        messagingSenderId: "695585468530",
+        appId: "1:695585468530:web:e0155f596c4778d1d412eb"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const user = tg.initDataUnsafe?.user;
+    const userId = user?.id || "guest_user";
+    
+    let currentBalance = 0;
+    let selectedCardType = "Uzcard";
+
+    // Balansni kuzatish
+    onValue(ref(db, `users/${userId}/balance`), (snap) => {
+        currentBalance = snap.val() || 0;
+        document.getElementById('userBalance').innerText = currentBalance.toFixed(2);
+    });
+
+    window.selectType = (type, btn) => {
+        selectedCardType = type;
+        document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    };
+
+    window.requestWithdraw = async () => {
+        const amount = parseFloat(document.getElementById('amount').value);
+        const card = document.getElementById('cardNumber').value.replace(/\s/g, '');
+
+        if (amount < 5000) return alert("Minimal summa 5000 so'm!");
+        if (amount > currentBalance) return alert("Mablag' yetarli emas!");
+        if (card.length < 16) return alert("Karta raqami xato!");
+
+        document.getElementById('withdrawBtn').disabled = true;
+
+        // 1. Balansni ayirish
+        await set(ref(db, `users/${userId}/balance`), currentBalance - amount);
+
+        // 2. So'rovni admin uchun yozish
+        const requestRef = ref(db, 'withdrawRequests');
+        const newReq = push(requestRef);
+        await set(newReq, {
+            userId: userId,
+            userName: user?.first_name || "Noma'lum",
+            amount: amount,
+            card: card,
+            type: selectedCardType,
+            status: "pending",
+            time: serverTimestamp()
+        });
+
+        alert("So'rov yuborildi! Admin tasdiqlashini kuting.");
+        window.location.href = 'rocket.html';
+    };
+</script>
+</body>
+</html>
