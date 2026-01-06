@@ -119,7 +119,7 @@
 
         let birdY, velocity, pipes, currentSessionScore, totalBalance = 0;
         let gameActive = false;
-        const gravity = 0.16, jump = -4.6, pipeSpeed = 1.8;
+        const gravity = 0.15, jump = -4.5, pipeSpeed = 1.6;
 
         onValue(userBalanceRef, (snapshot) => {
             totalBalance = snapshot.val() ? parseFloat(snapshot.val()) : 0;
